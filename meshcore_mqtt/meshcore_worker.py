@@ -222,6 +222,11 @@ class MeshCoreWorker:
             await self.meshcore.connect()
             self.meshcore.set_decrypt_channel_logs(True)
             self.logger.info("Connected to MeshCore device (decrypt_channels=True)")
+
+            # Prime channel secrets in meshcore parser so LOG_DATA can derive msg_hash
+            # and later CHANNEL_MSG_RECV lookups can match deterministically.
+            await self._prime_channel_info_cache()
+
             self._connected = True
             self._last_activity = time.time()
 
@@ -244,6 +249,54 @@ class MeshCoreWorker:
                 ComponentStatus.ERROR, f"connection_failed: {e}"
             )
             raise RuntimeError(f"Failed to connect to MeshCore device: {e}")
+
+    async def _prime_channel_info_cache(self) -> None:
+        """Fetch a few channel definitions to seed parser decryption context."""
+        if not self.meshcore:
+            return
+
+        max_channels_to_probe = 8
+        consecutive_errors = 0
+        populated = 0
+
+        for channel_idx in range(max_channels_to_probe):
+            try:
+                result = await self.meshcore.commands.get_channel(channel_idx)
+            except Exception as e:
+                consecutive_errors += 1
+                self.logger.debug(
+                    "Channel prime failed for idx=%s: %s", channel_idx, e
+                )
+                if consecutive_errors >= 3:
+                    break
+                continue
+
+            if result.is_error():
+                consecutive_errors += 1
+                self.logger.debug(
+                    "Channel prime error for idx=%s: %s",
+                    channel_idx,
+                    result.payload,
+                )
+                if consecutive_errors >= 3:
+                    break
+                continue
+
+            consecutive_errors = 0
+            populated += 1
+            payload = result.payload if isinstance(result.payload, dict) else {}
+            self.logger.debug(
+                "Channel primed idx=%s name=%s hash=%s",
+                payload.get("channel_idx", channel_idx),
+                payload.get("channel_name"),
+                payload.get("channel_hash"),
+            )
+
+        self.logger.info(
+            "Channel info priming complete: loaded=%s probed=%s",
+            populated,
+            max_channels_to_probe,
+        )
 
     async def _setup_event_subscriptions(self) -> None:
         """Set up MeshCore event subscriptions."""
