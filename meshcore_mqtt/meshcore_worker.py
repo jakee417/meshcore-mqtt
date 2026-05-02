@@ -264,9 +264,7 @@ class MeshCoreWorker:
                 result = await self.meshcore.commands.get_channel(channel_idx)
             except Exception as e:
                 consecutive_errors += 1
-                self.logger.debug(
-                    "Channel prime failed for idx=%s: %s", channel_idx, e
-                )
+                self.logger.debug("Channel prime failed for idx=%s: %s", channel_idx, e)
                 if consecutive_errors >= 3:
                     break
                 continue
@@ -284,13 +282,6 @@ class MeshCoreWorker:
 
             consecutive_errors = 0
             populated += 1
-            payload = result.payload if isinstance(result.payload, dict) else {}
-            self.logger.debug(
-                "Channel primed idx=%s name=%s hash=%s",
-                payload.get("channel_idx", channel_idx),
-                payload.get("channel_name"),
-                payload.get("channel_hash"),
-            )
 
         self.logger.info(
             "Channel info priming complete: loaded=%s probed=%s",
