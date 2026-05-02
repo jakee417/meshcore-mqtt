@@ -1,5 +1,5 @@
 paho-mqtt==2.1.0
 click==8.2.2
 pydantic==2.11.7
-meshcore==2.0.4
+git+https://github.com/jakee417/meshcore_py.git@main#egg=meshcore
 PyYAML==6.0.2
