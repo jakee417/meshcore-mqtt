@@ -220,7 +220,8 @@ class MeshCoreWorker:
         # Connect to MeshCore device
         try:
             await self.meshcore.connect()
-            self.logger.info("Connected to MeshCore device")
+            self.meshcore.set_decrypt_channel_logs(True)
+            self.logger.info("Connected to MeshCore device (decrypt_channels=True)")
             self._connected = True
             self._last_activity = time.time()
 
