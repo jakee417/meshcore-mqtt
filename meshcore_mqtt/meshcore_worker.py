@@ -69,6 +69,11 @@ class MeshCoreWorker:
         self._cache_max_size = 1000
         self._cache_ttl = 300  # 5 minutes
 
+        # Direct/private RX metadata cache for CONTACT_MSG_RECV enrichment
+        self._direct_rx_log: list[Dict[str, Any]] = []
+        self._direct_rx_max_size = 100
+        self._direct_rx_ttl_seconds = 30.0
+
         # Worker state
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -1023,6 +1028,72 @@ class MeshCoreWorker:
             for key, _ in sorted_items[:excess_count]:
                 del self._message_cache[key]
 
+    def _record_direct_rx_log(self, event_data: Any) -> None:
+        """Record RX_LOG_DATA metadata for direct/private text messages."""
+        payload = getattr(event_data, "payload", None)
+        if not isinstance(payload, dict):
+            return
+
+        if payload.get("payload_type") != 2:  # PAYLOAD_TYPE_TXT_MSG
+            return
+
+        metadata = {
+            "rssi": payload.get("rssi"),
+            "snr": payload.get("snr"),
+            "path": payload.get("path"),
+            "recv_time": payload.get("recv_time"),
+            "cached_at": time.time(),
+        }
+        self._direct_rx_log.append(metadata)
+
+        # Bound cache size
+        if len(self._direct_rx_log) > self._direct_rx_max_size:
+            excess = len(self._direct_rx_log) - self._direct_rx_max_size
+            del self._direct_rx_log[:excess]
+
+    def _consume_direct_rx_log(self) -> Optional[Dict[str, Any]]:
+        """Consume the newest non-stale direct/private RX metadata entry."""
+        now = time.time()
+
+        # Drop stale entries first
+        self._direct_rx_log = [
+            entry
+            for entry in self._direct_rx_log
+            if now - float(entry.get("cached_at", 0.0)) <= self._direct_rx_ttl_seconds
+        ]
+
+        if not self._direct_rx_log:
+            return None
+
+        # Newest entry is the best match for recently emitted CONTACT_MSG_RECV
+        return self._direct_rx_log.pop()
+
+    def _enrich_contact_event_with_direct_rx(self, event_data: Any) -> None:
+        """Inject RSSI/SNR metadata into CONTACT_MSG_RECV when available."""
+        payload = getattr(event_data, "payload", None)
+        if not isinstance(payload, dict):
+            return
+
+        has_rssi = payload.get("rssi") is not None or payload.get("RSSI") is not None
+        if has_rssi:
+            return
+
+        rx_meta = self._consume_direct_rx_log()
+        if rx_meta is None:
+            return
+
+        if rx_meta.get("rssi") is not None:
+            payload["rssi"] = rx_meta["rssi"]
+            payload["RSSI"] = rx_meta["rssi"]
+        if rx_meta.get("snr") is not None and payload.get("snr") is None:
+            payload["snr"] = rx_meta["snr"]
+            if payload.get("SNR") is None:
+                payload["SNR"] = rx_meta["snr"]
+        if rx_meta.get("path") is not None and payload.get("path") is None:
+            payload["path"] = rx_meta["path"]
+        if rx_meta.get("recv_time") is not None and payload.get("recv_time") is None:
+            payload["recv_time"] = rx_meta["recv_time"]
+
     def _on_meshcore_event(self, event_data: Any) -> None:
         """Handle MeshCore events and forward them to MQTT."""
         try:
@@ -1044,6 +1115,11 @@ class MeshCoreWorker:
             # Add extra logging for connection events to help debug
             if event_name in ["CONNECTED", "DISCONNECTED"]:
                 self.logger.info(f"MeshCore {event_name} event received: {event_data}")
+
+            if event_name == "RX_LOG_DATA":
+                self._record_direct_rx_log(event_data)
+            elif event_name == "CONTACT_MSG_RECV":
+                self._enrich_contact_event_with_direct_rx(event_data)
 
             # Check for duplicate messages (except for connection events)
             if event_name not in ["CONNECTED", "DISCONNECTED"]:

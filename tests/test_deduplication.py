@@ -135,3 +135,62 @@ class TestMessageDeduplication:
 
         # Even though fingerprints are same, connection events bypass deduplication
         assert fingerprint1 == fingerprint2
+
+    def test_contact_event_enriched_from_recent_direct_rx_log(
+        self, worker: MeshCoreWorker
+    ) -> None:
+        """CONTACT_MSG_RECV should gain RSSI/SNR from recent direct RX log."""
+        rx_event = Mock()
+        rx_event.payload = {
+            "payload_type": 2,
+            "rssi": -73,
+            "snr": 12.0,
+            "path": "",
+            "recv_time": 1777770484,
+        }
+
+        contact_event = Mock()
+        contact_event.payload = {
+            "type": "PRIV",
+            "pubkey_prefix": "c926de0b318c",
+            "text": "Chicken",
+            "SNR": 12.5,
+        }
+
+        worker._record_direct_rx_log(rx_event)
+        worker._enrich_contact_event_with_direct_rx(contact_event)
+
+        assert contact_event.payload["rssi"] == -73
+        assert contact_event.payload["RSSI"] == -73
+        # Preserve the event's explicit SNR while still offering lowercase alias.
+        assert contact_event.payload["SNR"] == 12.5
+        assert contact_event.payload["snr"] == 12.0
+        assert contact_event.payload["recv_time"] == 1777770484
+
+    def test_contact_event_enrichment_does_not_override_existing_rssi(
+        self, worker: MeshCoreWorker
+    ) -> None:
+        """Existing contact RSSI should be preserved."""
+        rx_event = Mock()
+        rx_event.payload = {
+            "payload_type": 2,
+            "rssi": -88,
+            "snr": 11.75,
+            "path": "",
+            "recv_time": 1777770500,
+        }
+
+        contact_event = Mock()
+        contact_event.payload = {
+            "type": "PRIV",
+            "pubkey_prefix": "c926de0b318c",
+            "text": "Chicken",
+            "RSSI": -65,
+            "SNR": 12.5,
+        }
+
+        worker._record_direct_rx_log(rx_event)
+        worker._enrich_contact_event_with_direct_rx(contact_event)
+
+        assert contact_event.payload["RSSI"] == -65
+        assert contact_event.payload.get("rssi") is None
