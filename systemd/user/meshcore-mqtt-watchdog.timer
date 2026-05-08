@@ -1,0 +1,12 @@
+[Unit]
+Description=Run MeshCore MQTT watchdog every minute (user)
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Persistent=true
+Unit=meshcore-mqtt-watchdog.service
+
+[Install]
+WantedBy=timers.target

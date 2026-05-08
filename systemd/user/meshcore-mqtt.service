@@ -1,0 +1,22 @@
+[Unit]
+Description=MeshCore MQTT Bridge (user service)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/meshcore-mqtt
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONFAULTHANDLER=1
+ExecStart=%h/.local/bin/meshcore-mqtt-run.sh
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=20
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

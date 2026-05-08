@@ -1,0 +1,11 @@
+[Unit]
+Description=Trigger daily restart of MeshCore MQTT Bridge
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=meshcore-mqtt-restart.service
+
+[Install]
+WantedBy=timers.target

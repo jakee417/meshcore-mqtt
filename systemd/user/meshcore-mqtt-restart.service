@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily restart of MeshCore MQTT Bridge
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user restart meshcore-mqtt.service

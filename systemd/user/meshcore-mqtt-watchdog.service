@@ -1,0 +1,9 @@
+[Unit]
+Description=MeshCore MQTT Watchdog (user)
+Wants=meshcore-mqtt.service
+After=meshcore-mqtt.service
+
+[Service]
+Type=oneshot
+ConditionPathExists=%h/.local/bin/meshcore-mqtt-healthcheck.sh
+ExecStart=%h/.local/bin/meshcore-mqtt-healthcheck.sh
